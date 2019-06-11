@@ -1,0 +1,81 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jun 11 21:32:00 2019
+
+@author: mi
+"""
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split,GridSearchCV
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import StandardScaler
+
+data = pd.read_csv(r'C:\Users\mi\Documents\python\data analysis\credit_default-master\UCI_Credit_Card.csv')
+
+#数据探索
+#print(data.describe())
+
+#查看下个月违约率情况
+next_month = data['default.payment.next.month'].value_counts() #value_counts函数可以对series里面的每个值进行计数并且排序
+#print(next_month)
+df = pd.DataFrame({'default.payment.next.month':next_month.index,'values':next_month.values})
+plt.rcParams['font.sans-serif']=['SimHei'] #设置字体，正常显示中文标签
+plt.figure(figsize=(6,6))
+plt.title('信用卡违约率客户\n（违约：1，守约：0）')
+sns.barplot(x = 'default.payment.next.month',y='values',data = df) #条形图
+locs, labels = plt.xticks()  #设置刻度线位置和标签
+plt.show()
+#删除id字段
+data.drop(['ID'],inplace = True,axis = 1)
+#确定特征及目标值
+target = data['default.payment.next.month'].values #以array形式返回指定column的所有取值
+columns = data.columns.tolist() #将所有列名生成一个list
+columns.remove('default.payment.next.month')
+features = data[columns].values
+
+train_x,test_x,train_y,test_y = train_test_split(features,target,test_size = 0.3,stratify = target)
+
+classifiers = [
+        SVC(random_state=1,kernel = 'rbf'),
+        DecisionTreeClassifier(random_state=1,criterion = 'gini'),
+        RandomForestClassifier(random_state=1,criterion = 'gini'),
+        KNeighborsClassifier(metric = 'minkowski')
+        ]
+classifier_names = ['svc',
+                    'decisiontreeclassifier',
+                    'randomforestclassifier',
+                    'kneighborsclassifier',
+                    ]
+classifier_param_grid = [
+        {'svc__C':[1], 'svc__gamma':[0.01]},
+        {'decisiontreeclassifier__max_depth':[6,9,11]},
+        {'randomforestclassifier__n_estimators':[3,5,6]} ,
+        {'kneighborsclassifier__n_neighbors':[4,6,8]},
+        ]
+# 对具体的分类器进行 GridSearchCV 参数调优
+def GridSearchCV_work(pipeline, train_x, train_y, test_x, test_y, param_grid, score = 'accuracy'):
+    response = {}
+    gridsearch = GridSearchCV(estimator = pipeline, param_grid = param_grid, scoring = score)
+    # 寻找最优的参数和最优的准确率分数
+    search = gridsearch.fit(train_x, train_y)
+    print("GridSearch 最优参数：", search.best_params_)
+    print("GridSearch 最优分数： %0.4lf" %search.best_score_)
+    predict_y = gridsearch.predict(test_x)
+    print(" 准确率 %0.4lf" %accuracy_score(test_y, predict_y))
+    response['predict_y'] = predict_y
+    response['accuracy_score'] = accuracy_score(test_y,predict_y)
+    return response
+for model, model_name, model_param_grid in zip(classifiers, classifier_names, classifier_param_grid):
+    pipeline = Pipeline([
+            ('scaler', StandardScaler()),
+            (model_name, model)
+            ])
+    result = GridSearchCV_work(pipeline, train_x, train_y, test_x, test_y, 
+                           model_param_grid , score = 'accuracy')
